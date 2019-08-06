@@ -67,7 +67,9 @@ int main() {
     char get_back[MAX_LENGTH]="0A0B";   //initial input to guess function
     srand(time(NULL));
     struct timeval tval_before, tval_after, tval_result;
-
+	printf("\n***********星爆猜數字************\n\n");
+	printf("規則：猜四位數字，數字包含0~9（可重複） \n數字與位置正確為A，數字正確但位置不正確則為B。\n\nEx.正解為1341，猜1354則回傳2A1B\n\n");
+	printf("請輸入四位數字:\n");
     int i=0;
     for(i=0; i<MAX_LENGTH; i++) {
         ans[i] = rand()%10+'0';
@@ -79,7 +81,7 @@ int main() {
     while(1){
         //get_back means the result of your guess
   	    strcpy(get_back,check(guess(get_back), ans));
-        printf("[%d] %s\n",i,get_back);
+        printf("[%d] %s\n\n",i,get_back);
         // your guess is right!!! Congratulation !!!
         if(strcmp(get_back,"Answer Correct!!")==0)
              break;
