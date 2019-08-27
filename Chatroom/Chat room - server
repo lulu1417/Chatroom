@@ -1,0 +1,144 @@
+#include <stdio.h>
+#include <stdlib.h>
+#include <unistd.h>
+#include <sys/socket.h>
+#include <sys/types.h>
+#include <pthread.h>
+#include <string.h>
+#include <netinet/in.h>
+#include <arpa/inet.h>
+
+#define CYAN "\033[0;36m"
+#define YEL "\x1b[;33;1m"
+#define NONE "\033[m"
+#define LIGHT_BLUE "\033[1;34m"
+
+struct sockaddr_in client_addr[10];	// limit connect: 10 people
+socklen_t src_len = sizeof(client_addr[0]);
+
+int confd[10] = {};
+pthread_mutex_t mutex; //PTHREAD_MUTEX_INITIALIZER; 
+int count = 0;		// number of people connected 
+FILE* fp = NULL;
+
+void *broadcast(void *indexp){		// function for pthread
+
+	int index = *(int *)indexp;
+	char inputBuf[256] = {};	// buffer for recv
+	char outputBuf[256] = {};	// buffer for send
+	char name[20] = {};
+	int ret = recv(confd[index], name, sizeof(name), 0);
+	if(ret < 0){
+		perror("recv error");
+		pthread_mutex_lock(&mutex);
+    		/* START CRITICAL SECTION */
+		close(confd[index]);
+		count--; 
+    	 	/* END CRITICAL SECTION */   
+    	   	pthread_mutex_unlock(&mutex);
+		return;
+	}
+	sprintf(outputBuf,"%s join the chat room", name);
+	for(int i = 0; i <= count; i++){
+		if(confd[i] == 0){
+			continue;
+		}	// exclude
+		send(confd[i], outputBuf, strlen(outputBuf), 0);	// send to other people
+	}
+
+
+	while(1){ 
+		bzero(inputBuf,sizeof(inputBuf));	// clean buffer
+		recv(confd[index], inputBuf, sizeof(inputBuf), 0);
+
+		if(strcmp("quit", inputBuf) == 0){	// leave chat room
+			sprintf(outputBuf,"%s leave the chat room", name);	// send message to other people
+			for(int i = 0; i <= count; i++){
+				if(i == index || confd[i] == 0){continue;}	// exclude
+				send(confd[i], outputBuf, strlen(outputBuf), 0);
+			}
+			pthread_mutex_lock(&mutex);
+		    /* START CRITICAL SECTION */
+			confd[index] = -1; 
+			count--;
+			pthread_exit(0);
+		    /* END CRITICAL SECTION */   
+		    	pthread_mutex_unlock(&mutex);
+		}
+		sprintf(outputBuf,"%s:%s\n", name, inputBuf);	// outputBuf <- inputBuf	
+		printf(LIGHT_BLUE"%s: ",name);
+		printf(NONE"%s\n",inputBuf); 
+		
+		pthread_mutex_lock(&mutex);
+	   	/* START CRITICAL SECTION */
+		fprintf(fp,outputBuf, strlen(outputBuf)); //write all the messages into chatLog.txt
+		fflush(fp);
+	    	/* END CRITICAL SECTION */   
+		 pthread_mutex_unlock(&mutex);
+
+		for(int i = 0; i <= count; i++){
+			if(i == index || confd[i] == 0){continue;}	// exclude
+			send(confd[i], outputBuf, strlen(outputBuf), 0);	// send to other people
+		}
+	}
+}
+
+
+
+int main(){
+	
+   	pthread_mutex_init(&mutex, 0); //initialize mutex
+	fp = fopen("chatLog.txt","a+");
+	printf("multiple chat room open!!!\n");
+
+	// create the server socket
+	int server_socket = socket(AF_INET, SOCK_STREAM, 0);
+
+	// define the server address
+	struct sockaddr_in server_address;
+	
+	server_address.sin_family = AF_INET;
+	server_address.sin_port = htons(9002);
+	server_address.sin_addr.s_addr = INADDR_ANY;	// 0.0.0.0
+
+	// bind the socket to our specified IP and port
+	bind(server_socket, (struct sockaddr *) &server_address, sizeof(server_address));
+	// bind(int sockfd, struct sockaddr* addr, int addr_len)
+
+	listen(server_socket, 10);
+	// listen(int sockfd, int backlog)
+	// backlog >> limit number of people connect to server
+
+	int index = 0;
+
+	while(count <= 10){
+
+		confd[count] = accept(server_socket,(struct sockaddr *)&client_addr[count], &src_len);
+		// accept(int sockfd, struct sockaddr addr, socklen_t addr_len)
+		
+		pthread_mutex_lock(&mutex);
+	    	/* START CRITICAL SECTION */
+		if(confd[count] == -1){printf("accept error\n");return -1;}
+		++count;
+	    	/* END CRITICAL SECTION */   
+		pthread_mutex_unlock(&mutex);
+		index = count - 1;
+
+		pthread_t tid;
+		int ret = pthread_create(&tid, NULL, broadcast, &index);
+		// multithread
+
+		if(ret < 0){
+			perror("pthread_create error");
+			return -1;
+		}
+
+	}
+	pthread_mutex_destroy(&mutex); //destroy mutex
+
+	// close the socket
+	//close(server_socket);
+	return 0;
+}
+
+
