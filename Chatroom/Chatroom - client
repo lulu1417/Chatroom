@@ -1,1 +1,93 @@
+//compile command: gcc client.c -o client -lpthread
+#include <stdio.h>
+#include <stdlib.h>
+#include <sys/types.h>
+#include <sys/socket.h>
+#include <pthread.h>
+#include <string.h>
+#include <netinet/in.h>				// define struct sockaddr_in
+#include <arpa/inet.h>
+#include <time.h>
 
+#define CYAN "\033[0;36m"
+#define YEL "\x1b[;33;1m"
+#define NONE "\033[m"
+
+int network_socket;
+
+void *recv_other(void *arg){			// function for pthread
+
+	while(1){
+		char in_buf[255] = {};
+		int ret = recv(network_socket, in_buf, sizeof(in_buf), 0);
+		if(ret < 0){printf("recieve error\n");return;}
+		printf(CYAN"%s"NONE, in_buf);
+		printf("\n");
+	}
+}
+
+int main(){
+
+	// create a socket
+	network_socket = socket(AF_INET, SOCK_STREAM, 0);
+	if(network_socket == -1){printf("socket error\n");}
+	// int socket(domain, type, protocol), if fail return -1 
+
+	// specify an address for the socket
+	struct sockaddr_in server_address;
+	server_address.sin_family = AF_INET;
+
+	// htons:big endian or little endian
+	server_address.sin_port = htons(9002);
+	server_address.sin_addr.s_addr = INADDR_ANY;
+
+	// int connect(int sd, struct sockaddr *server, int addr_len)
+	int connection_status = connect(network_socket, (struct sockaddr *) &server_address, sizeof(server_address));
+	// check for error with the connection
+	if(connection_status < 0){perror("connect");return -1;}
+
+	char buffer[255] = {};
+	char name[255] = {};
+	char username[255]={};
+	//printf(YEL"enter your nickname:"NONE" ");
+	//scanf("%s",name);
+	FILE *f;
+	f=fopen("name.txt", "r");
+	if(NULL==f)
+	{printf("Open file Failure!");}
+	else
+	{
+		srand(time(NULL));
+		int x=rand()%10;
+		for(int a=0;a<x;a++)
+		{
+			fgets(username,255,f);
+		}
+		fscanf(f,"%[^\n]%*c", name);
+		int send_txt = send(network_socket, buffer, strlen(buffer), 0);
+		send(network_socket, name, strlen(name), 0);// send the name to server
+	
+	}			
+	
+	pthread_t tid;
+	// multithread
+	int ret = pthread_create(&tid, NULL, recv_other, NULL);
+	if(ret < 0){printf("pthread create error\n");}	
+
+	while(1)
+	{				
+		//gets(buffer);
+		fgets(buffer,255, stdin);
+		if(buffer[strlen(buffer) - 1] == '\n')
+    			buffer[strlen(buffer) - 1] = '\0';
+
+		int send_ret = send(network_socket, buffer, strlen(buffer), 0);
+		if(send_ret < 0){printf("send fail\n");return -1;}
+
+		if(strcmp("quit", buffer) == 0){	// leave chat room
+			printf(YEL"%s,You have leaved the chat room\n", name);
+			return 0;
+	}
+//	return 0;
+}
+}
